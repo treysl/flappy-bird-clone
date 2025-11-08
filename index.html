@@ -11,11 +11,14 @@
         <canvas id="gameCanvas"></canvas>
         <div id="startScreen" class="screen">
             <h1>Flappy Bird</h1>
+            <p class="instructions">Press SPACE or click to flap!</p>
+            <p class="instructions">Avoid the pipes and don't hit the ground.</p>
             <button id="startButton">Start Game</button>
         </div>
         <div id="gameOverScreen" class="screen hidden">
             <h2>Game Over</h2>
-            <p>Score: <span id="finalScore">0</span></p>
+            <p class="score-label">Your Score: <span id="finalScore">0</span></p>
+            <p class="score-label">Best Score: <span id="highScore">0</span></p>
             <button id="restartButton">Play Again</button>
         </div>
     </div>
