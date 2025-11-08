@@ -4,6 +4,15 @@ class FlappyBird {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         
+        // Pixel art style - disable smoothing for crisp pixels
+        this.ctx.imageSmoothingEnabled = false;
+        
+        // Wing animation state
+        this.wingAnimationFrame = 0;
+        
+        // Pattern cache for performance
+        this.patterns = {};
+        
         // Game configuration (must be defined before setCanvasSize)
         this.config = {
             gravity: 0.3,
@@ -39,7 +48,8 @@ class FlappyBird {
             width: this.config.birdSize,
             height: this.config.birdSize,
             velocity: 0,
-            rotation: 0
+            rotation: 0,
+            wingAngle: 0 // Wing animation angle
         };
         
         // Set canvas size (this will call draw, so bird must exist)
@@ -80,6 +90,11 @@ class FlappyBird {
         } else if (this.gameRunning && this.config && this.bird) {
             // Keep bird centered horizontally during game
             this.bird.x = this.canvas.width / 2 - this.config.birdSize / 2;
+        }
+        
+        // Re-enable pixel art mode after canvas resize
+        if (this.ctx) {
+            this.ctx.imageSmoothingEnabled = false;
         }
         
         // Redraw only if context exists
@@ -192,8 +207,10 @@ class FlappyBird {
                 width: this.config.birdSize,
                 height: this.config.birdSize,
                 velocity: 0,
-                rotation: 0
+                rotation: 0,
+                wingAngle: 0
             };
+            this.wingAnimationFrame = 0;
             this.pipes = [];
             this.lastTime = performance.now();
             
@@ -247,6 +264,62 @@ class FlappyBird {
         }
     }
 
+    // Pattern generator functions
+    createPattern(type, width, height, color1, color2) {
+        const cacheKey = `${type}_${width}_${height}_${color1}_${color2}`;
+        if (this.patterns[cacheKey]) {
+            return this.patterns[cacheKey];
+        }
+        
+        const patternCanvas = document.createElement('canvas');
+        patternCanvas.width = width;
+        patternCanvas.height = height;
+        const patternCtx = patternCanvas.getContext('2d');
+        patternCtx.imageSmoothingEnabled = false;
+        
+        if (type === 'stripes') {
+            // Vertical stripes pattern
+            patternCtx.fillStyle = color1;
+            patternCtx.fillRect(0, 0, width, height);
+            patternCtx.fillStyle = color2;
+            for (let x = 0; x < width; x += 8) {
+                patternCtx.fillRect(x, 0, 4, height);
+            }
+        } else if (type === 'bricks') {
+            // Brick pattern
+            patternCtx.fillStyle = color1;
+            patternCtx.fillRect(0, 0, width, height);
+            patternCtx.fillStyle = color2;
+            const brickHeight = 12;
+            const brickWidth = 20;
+            for (let y = 0; y < height; y += brickHeight) {
+                const offset = (y / brickHeight) % 2 === 0 ? 0 : brickWidth / 2;
+                for (let x = -offset; x < width; x += brickWidth) {
+                    patternCtx.fillRect(Math.round(x), Math.round(y), brickWidth - 2, brickHeight - 2);
+                }
+            }
+        } else if (type === 'wood') {
+            // Wood grain pattern
+            patternCtx.fillStyle = color1;
+            patternCtx.fillRect(0, 0, width, height);
+            patternCtx.strokeStyle = color2;
+            patternCtx.lineWidth = 1;
+            for (let y = 0; y < height; y += 3) {
+                patternCtx.beginPath();
+                const wave = Math.sin(y * 0.1) * 2;
+                patternCtx.moveTo(0, y);
+                for (let x = 0; x < width; x += 5) {
+                    patternCtx.lineTo(x, y + Math.sin(x * 0.2 + y * 0.1) * 1);
+                }
+                patternCtx.stroke();
+            }
+        }
+        
+        const pattern = this.ctx.createPattern(patternCanvas, 'repeat');
+        this.patterns[cacheKey] = pattern;
+        return pattern;
+    }
+
     createPipe() {
         const minHeight = 50;
         const maxHeight = this.canvas.height - this.config.pipeGap - this.config.groundHeight - minHeight;
@@ -262,6 +335,11 @@ class FlappyBird {
 
     update(deltaTime) {
         if (!this.gameRunning) return;
+        
+        // Update wing animation frame (always animate, even when stationary)
+        this.wingAnimationFrame += deltaTime / 16.67; // Normalize to 60fps
+        // Calculate wing angle using sine wave for smooth flapping
+        this.bird.wingAngle = Math.sin(this.wingAnimationFrame * 0.3) * 25; // 25 degree max angle
 
         // Only apply physics and move pipes after game has started (first flap)
         if (this.gameStarted) {
@@ -353,99 +431,154 @@ class FlappyBird {
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw background gradient
+        // Draw background with subtle pattern (pixel art style - darker sky)
         const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-        gradient.addColorStop(0, '#87CEEB');
-        gradient.addColorStop(1, '#E0F6FF');
+        gradient.addColorStop(0, '#5B9BD5'); // Pixel art blue
+        gradient.addColorStop(1, '#B0D4E6'); // Lighter blue
         this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw pipes with caps
-        this.ctx.fillStyle = '#228B22';
+        // Draw pipes with patterns (pixel art style)
         if (this.pipes && Array.isArray(this.pipes)) {
             this.pipes.forEach(pipe => {
-            // Top pipe
-            this.ctx.fillRect(pipe.x, 0, this.config.pipeWidth, pipe.topHeight);
-            // Top pipe cap
-            this.ctx.fillRect(pipe.x - 5, pipe.topHeight - 20, this.config.pipeWidth + 10, 20);
-            
-            // Bottom pipe
-            const bottomY = this.canvas.height - pipe.bottomHeight - this.config.groundHeight;
-            this.ctx.fillRect(pipe.x, bottomY, this.config.pipeWidth, pipe.bottomHeight);
-            // Bottom pipe cap
-            this.ctx.fillRect(pipe.x - 5, bottomY, this.config.pipeWidth + 10, 20);
+                // Use integer coordinates for pixel art
+                const pipeX = Math.round(pipe.x);
+                const pipeW = Math.round(this.config.pipeWidth);
+                
+                // Create brick pattern for pipes
+                const pipePattern = this.createPattern('bricks', pipeW, pipe.topHeight, '#2D5016', '#3A6B1F');
+                
+                // Top pipe
+                this.ctx.fillStyle = pipePattern;
+                this.ctx.fillRect(pipeX, 0, pipeW, Math.round(pipe.topHeight));
+                
+                // Top pipe cap (darker green)
+                this.ctx.fillStyle = '#1A3D0A';
+                this.ctx.fillRect(Math.round(pipeX - 5), Math.round(pipe.topHeight - 20), pipeW + 10, 20);
+                
+                // Bottom pipe
+                const bottomY = Math.round(this.canvas.height - pipe.bottomHeight - this.config.groundHeight);
+                this.ctx.fillStyle = pipePattern;
+                this.ctx.fillRect(pipeX, bottomY, pipeW, Math.round(pipe.bottomHeight));
+                
+                // Bottom pipe cap
+                this.ctx.fillStyle = '#1A3D0A';
+                this.ctx.fillRect(Math.round(pipeX - 5), bottomY, pipeW + 10, 20);
             });
         }
 
-        // Draw ground
-        this.ctx.fillStyle = '#8B4513';
-        this.ctx.fillRect(0, this.canvas.height - this.config.groundHeight, this.canvas.width, this.config.groundHeight);
+        // Draw ground with wood grain pattern (pixel art style)
+        const groundY = Math.round(this.canvas.height - this.config.groundHeight);
+        const woodPattern = this.createPattern('wood', this.canvas.width, this.config.groundHeight, '#6B4423', '#8B5A3C');
+        this.ctx.fillStyle = woodPattern;
+        this.ctx.fillRect(0, groundY, this.canvas.width, this.config.groundHeight);
         
-        // Ground grass line
-        this.ctx.strokeStyle = '#6B8E23';
+        // Ground grass line (pixel art style - thicker)
+        this.ctx.strokeStyle = '#4A5D23';
         this.ctx.lineWidth = 2;
         this.ctx.beginPath();
-        this.ctx.moveTo(0, this.canvas.height - this.config.groundHeight);
-        this.ctx.lineTo(this.canvas.width, this.canvas.height - this.config.groundHeight);
+        this.ctx.moveTo(0, groundY);
+        this.ctx.lineTo(this.canvas.width, groundY);
         this.ctx.stroke();
 
-        // Draw bird with rotation (only if bird exists)
+        // Draw bird with rotation and animated wing (pixel art style)
         if (this.bird && this.bird.x !== undefined && this.bird.y !== undefined) {
             this.ctx.save();
-            this.ctx.translate(
-                this.bird.x + this.bird.width / 2,
-                this.bird.y + this.bird.height / 2
-            );
+            const birdCenterX = Math.round(this.bird.x + this.bird.width / 2);
+            const birdCenterY = Math.round(this.bird.y + this.bird.height / 2);
+            this.ctx.translate(birdCenterX, birdCenterY);
             this.ctx.rotate((this.bird.rotation * Math.PI) / 180);
         
-        // Bird body (yellow)
-        this.ctx.fillStyle = '#FFD700';
-        this.ctx.beginPath();
-        this.ctx.ellipse(0, 0, this.bird.width / 2, this.bird.height / 2, 0, 0, Math.PI * 2);
-        this.ctx.fill();
+            // Bird body (pixel art yellow - more saturated)
+            this.ctx.fillStyle = '#FFC800';
+            this.ctx.fillRect(
+                Math.round(-this.bird.width / 2), 
+                Math.round(-this.bird.height / 2), 
+                this.bird.width, 
+                this.bird.height
+            );
+            
+            // Bird body outline for pixel art style
+            this.ctx.strokeStyle = '#E6B800';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(
+                Math.round(-this.bird.width / 2), 
+                Math.round(-this.bird.height / 2), 
+                this.bird.width, 
+                this.bird.height
+            );
         
-        // Bird wing
-        this.ctx.fillStyle = '#FFA500';
-        this.ctx.beginPath();
-        this.ctx.ellipse(-5, 0, 8, 12, 0, 0, Math.PI * 2);
-        this.ctx.fill();
+            // Animated bird wing (rotates based on wingAngle)
+            this.ctx.save();
+            this.ctx.rotate((this.bird.wingAngle * Math.PI) / 180);
+            this.ctx.fillStyle = '#FF8C00';
+            // Draw wing as rectangle for pixel art style
+            this.ctx.fillRect(
+                Math.round(-this.bird.width / 2 - 8), 
+                Math.round(-6), 
+                10, 
+                12
+            );
+            // Wing outline
+            this.ctx.strokeStyle = '#E67A00';
+            this.ctx.strokeRect(
+                Math.round(-this.bird.width / 2 - 8), 
+                Math.round(-6), 
+                10, 
+                12
+            );
+            this.ctx.restore();
         
-        // Bird eye
-        this.ctx.fillStyle = '#000';
-        this.ctx.beginPath();
-        this.ctx.arc(5, -5, 3, 0, Math.PI * 2);
-        this.ctx.fill();
+            // Bird eye (pixel art style - square-ish)
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillRect(
+                Math.round(this.bird.width / 2 - 8), 
+                Math.round(-this.bird.height / 2 + 2), 
+                4, 
+                4
+            );
+            
+            // Eye highlight
+            this.ctx.fillStyle = '#FFF';
+            this.ctx.fillRect(
+                Math.round(this.bird.width / 2 - 7), 
+                Math.round(-this.bird.height / 2 + 3), 
+                2, 
+                2
+            );
         
-        // Bird beak
-        this.ctx.fillStyle = '#FF6347';
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.bird.width / 2 - 2, 0);
-        this.ctx.lineTo(this.bird.width / 2 + 5, -3);
-        this.ctx.lineTo(this.bird.width / 2 + 5, 3);
-        this.ctx.closePath();
-        this.ctx.fill();
+            // Bird beak (pixel art style - triangular)
+            this.ctx.fillStyle = '#FF4500';
+            this.ctx.beginPath();
+            this.ctx.moveTo(Math.round(this.bird.width / 2), 0);
+            this.ctx.lineTo(Math.round(this.bird.width / 2 + 6), -2);
+            this.ctx.lineTo(Math.round(this.bird.width / 2 + 6), 2);
+            this.ctx.closePath();
+            this.ctx.fill();
         
             this.ctx.restore();
         }
 
-        // Draw score with better styling
+        // Draw score with pixel art styling
         this.ctx.fillStyle = '#FFF';
         this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 3;
-        this.ctx.font = 'bold 28px Arial';
+        this.ctx.lineWidth = 2;
+        this.ctx.font = 'bold 28px monospace'; // Monospace for pixel art feel
         const scoreText = this.score.toString();
-        this.ctx.strokeText(scoreText, this.canvas.width / 2 - this.ctx.measureText(scoreText).width / 2, 40);
-        this.ctx.fillText(scoreText, this.canvas.width / 2 - this.ctx.measureText(scoreText).width / 2, 40);
+        const scoreX = Math.round(this.canvas.width / 2 - this.ctx.measureText(scoreText).width / 2);
+        this.ctx.strokeText(scoreText, scoreX, 40);
+        this.ctx.fillText(scoreText, scoreX, 40);
 
-        // Draw high score
+        // Draw high score (pixel art style)
         if (this.highScore > 0) {
-            this.ctx.fillStyle = '#FFD700';
+            this.ctx.fillStyle = '#FFC800';
             this.ctx.strokeStyle = '#000';
             this.ctx.lineWidth = 2;
-            this.ctx.font = 'bold 16px Arial';
+            this.ctx.font = 'bold 16px monospace';
             const highScoreText = `Best: ${this.highScore}`;
-            this.ctx.strokeText(highScoreText, this.canvas.width / 2 - this.ctx.measureText(highScoreText).width / 2, 70);
-            this.ctx.fillText(highScoreText, this.canvas.width / 2 - this.ctx.measureText(highScoreText).width / 2, 70);
+            const highScoreX = Math.round(this.canvas.width / 2 - this.ctx.measureText(highScoreText).width / 2);
+            this.ctx.strokeText(highScoreText, highScoreX, 70);
+            this.ctx.fillText(highScoreText, highScoreX, 70);
         }
     }
 
