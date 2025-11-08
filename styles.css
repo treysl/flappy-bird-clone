@@ -115,6 +115,9 @@ button {
     margin-top: 20px;
     min-width: 150px;
     touch-action: manipulation;
+    pointer-events: auto;
+    position: relative;
+    z-index: 20;
 }
 
 button:hover {

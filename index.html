@@ -13,15 +13,44 @@
             <h1>Flappy Bird</h1>
             <p class="instructions">Press SPACE or click to flap!</p>
             <p class="instructions">Avoid the pipes and don't hit the ground.</p>
-            <button id="startButton">Start Game</button>
+            <button id="startButton" onclick="console.log('Inline onclick fired'); if(window.flappyBirdGame) { console.log('Game found, starting...'); window.flappyBirdGame.startGame(); } else { console.error('Game not found!'); }">Start Game</button>
         </div>
         <div id="gameOverScreen" class="screen hidden">
             <h2>Game Over</h2>
             <p class="score-label">Your Score: <span id="finalScore">0</span></p>
             <p class="score-label">Best Score: <span id="highScore">0</span></p>
-            <button id="restartButton">Play Again</button>
+            <button id="restartButton" onclick="if(window.flappyBirdGame) window.flappyBirdGame.startGame();">Play Again</button>
         </div>
     </div>
     <script src="game.js"></script>
+    <script>
+        // Emergency fallback - test if button works at all
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const btn = document.getElementById('startButton');
+                if (btn) {
+                    console.log('Button exists, adding emergency handler');
+                    btn.onclick = function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Emergency onclick handler fired!');
+                        if (window.flappyBirdGame) {
+                            console.log('Calling startGame via emergency handler');
+                            window.flappyBirdGame.startGame();
+                        } else {
+                            console.error('Game not available in emergency handler');
+                            // Try to initialize game
+                            if (typeof FlappyBird !== 'undefined') {
+                                console.log('FlappyBird class found, creating instance...');
+                                window.flappyBirdGame = new FlappyBird();
+                                window.flappyBirdGame.startGame();
+                            }
+                        }
+                        return false;
+                    };
+                }
+            }, 100);
+        });
+    </script>
 </body>
 </html>

@@ -1,20 +1,13 @@
+// Make class globally accessible
 class FlappyBird {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         
-        // Set canvas size (base size, will scale for mobile)
-        this.baseWidth = 400;
-        this.baseHeight = 600;
-        this.setCanvasSize();
-        
-        // Handle window resize
-        window.addEventListener('resize', () => this.setCanvasSize());
-
-        // Game configuration
+        // Game configuration (must be defined before setCanvasSize)
         this.config = {
             gravity: 0.3,
-            flapPower: -5.5,
+            flapPower: -7.5, // Increased flap power for better control
             gameSpeed: 2,
             pipeWidth: 60,
             pipeGap: 180,
@@ -22,27 +15,42 @@ class FlappyBird {
             groundHeight: 20,
             birdSize: 30
         };
-
-        // Game state
+        
+        // Initialize pipes array early (needed for draw method)
+        this.pipes = [];
+        
+        // Game state (initialize early)
         this.gameRunning = false;
+        this.gameStarted = false; // Track if player has made first flap
         this.score = 0;
         this.highScore = this.loadHighScore();
         this.animationFrameId = null;
         this.lastTime = 0;
-        this.nextPipeX = this.canvas.width; // Track when to create next pipe
-
-        // Bird properties (centered horizontally, only moves vertically)
+        
+        // Set canvas size (base size, will scale for mobile)
+        this.baseWidth = 400;
+        this.baseHeight = 600;
+        
+        // Initialize bird early (needed for draw method)
+        // Will be repositioned after canvas size is set
         this.bird = {
-            x: this.canvas.width / 2 - this.config.birdSize / 2,
-            y: this.canvas.height / 2,
+            x: 0,
+            y: 0,
             width: this.config.birdSize,
             height: this.config.birdSize,
             velocity: 0,
             rotation: 0
         };
-
-        // Pipe properties
-        this.pipes = [];
+        
+        // Set canvas size (this will call draw, so bird must exist)
+        this.setCanvasSize();
+        
+        // Now position bird correctly after canvas size is known
+        this.bird.x = this.canvas.width / 2 - this.config.birdSize / 2;
+        this.bird.y = this.canvas.height / 2;
+        
+        // Handle window resize
+        window.addEventListener('resize', () => this.setCanvasSize());
 
         // Setup event listeners
         this.setupEventListeners();
@@ -65,22 +73,19 @@ class FlappyBird {
             this.canvas.height = this.baseHeight;
         }
         
-        // Update bird position if game not running
-        if (!this.gameRunning) {
+        // Update bird position if game not running and config exists
+        if (!this.gameRunning && this.config && this.bird) {
             this.bird.x = this.canvas.width / 2 - this.config.birdSize / 2;
             this.bird.y = this.canvas.height / 2;
-        } else {
+        } else if (this.gameRunning && this.config && this.bird) {
             // Keep bird centered horizontally during game
             this.bird.x = this.canvas.width / 2 - this.config.birdSize / 2;
         }
         
-        // Update next pipe position
-        if (this.nextPipeX > this.canvas.width) {
-            this.nextPipeX = this.canvas.width;
+        // Redraw only if context exists
+        if (this.ctx) {
+            this.draw();
         }
-        
-        // Redraw
-        this.draw();
     }
 
     setupEventListeners() {
@@ -121,9 +126,39 @@ class FlappyBird {
             }
         });
 
-        // Button listeners
-        document.getElementById('startButton').addEventListener('click', () => this.startGame());
-        document.getElementById('restartButton').addEventListener('click', () => this.startGame());
+        // Button listeners - use arrow function to preserve 'this' context
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        
+        if (startButton) {
+            console.log('Start button found, attaching listener');
+            startButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Start button clicked!');
+                this.startGame();
+            });
+            // Also add mousedown as backup
+            startButton.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                console.log('Start button mousedown!');
+                this.startGame();
+            });
+        } else {
+            console.error('Start button not found!');
+        }
+        
+        if (restartButton) {
+            console.log('Restart button found, attaching listener');
+            restartButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Restart button clicked!');
+                this.startGame();
+            });
+        } else {
+            console.error('Restart button not found!');
+        }
     }
 
     loadHighScore() {
@@ -146,35 +181,68 @@ class FlappyBird {
     }
 
     startGame() {
-        this.gameRunning = true;
-        this.score = 0;
-        this.bird = {
-            x: this.canvas.width / 2 - this.config.birdSize / 2,
-            y: this.canvas.height / 2,
-            width: this.config.birdSize,
-            height: this.config.birdSize,
-            velocity: 0,
-            rotation: 0
-        };
-        this.pipes = [];
-        this.nextPipeX = this.canvas.width;
-        this.lastTime = performance.now();
-        
-        // Hide screens
-        document.getElementById('startScreen').classList.add('hidden');
-        document.getElementById('gameOverScreen').classList.add('hidden');
-        
-        // Cancel any existing animation frame
-        if (this.animationFrameId) {
-            cancelAnimationFrame(this.animationFrameId);
+        console.log('startGame() called');
+        try {
+            this.gameRunning = true;
+            this.gameStarted = false; // Reset - game starts on first flap
+            this.score = 0;
+            this.bird = {
+                x: this.canvas.width / 2 - this.config.birdSize / 2,
+                y: this.canvas.height / 2,
+                width: this.config.birdSize,
+                height: this.config.birdSize,
+                velocity: 0,
+                rotation: 0
+            };
+            this.pipes = [];
+            this.lastTime = performance.now();
+            
+            // Don't create first pipe until game actually starts (first flap)
+            
+            // Hide screens
+            const startScreen = document.getElementById('startScreen');
+            const gameOverScreen = document.getElementById('gameOverScreen');
+            
+            console.log('Hiding screens...');
+            if (startScreen) {
+                console.log('Start screen found, hiding it');
+                startScreen.classList.add('hidden');
+                // Force hide with inline style as backup
+                startScreen.style.display = 'none';
+            } else {
+                console.error('Start screen not found!');
+            }
+            if (gameOverScreen) {
+                gameOverScreen.classList.add('hidden');
+                gameOverScreen.style.display = 'none';
+            }
+            
+            // Cancel any existing animation frame
+            if (this.animationFrameId) {
+                cancelAnimationFrame(this.animationFrameId);
+                this.animationFrameId = null;
+            }
+            
+            console.log('Starting game loop...');
+            // Start the game loop
+            this.gameLoop();
+            console.log('Game started successfully!');
+        } catch (error) {
+            console.error('Error starting game:', error);
+            console.error(error.stack);
+            this.gameRunning = false;
         }
-        
-        // Start the game loop
-        this.gameLoop();
     }
 
     flap() {
         if (this.gameRunning) {
+            // Start the game on first flap
+            if (!this.gameStarted) {
+                this.gameStarted = true;
+                console.log('Game started with first flap!');
+                // Create first pipe when game actually starts
+                this.createPipe();
+            }
             this.bird.velocity = this.config.flapPower;
         }
     }
@@ -195,42 +263,54 @@ class FlappyBird {
     update(deltaTime) {
         if (!this.gameRunning) return;
 
-        // Update bird physics
-        this.bird.velocity += this.config.gravity;
-        this.bird.y += this.bird.velocity * (deltaTime / 16.67); // Normalize to 60fps
+        // Only apply physics and move pipes after game has started (first flap)
+        if (this.gameStarted) {
+            // Update bird physics
+            this.bird.velocity += this.config.gravity;
+            this.bird.y += this.bird.velocity * (deltaTime / 16.67); // Normalize to 60fps
 
-        // Calculate bird rotation based on velocity (max 30 degrees)
-        this.bird.rotation = Math.min(Math.max(this.bird.velocity * 3, -30), 30);
+            // Calculate bird rotation based on velocity (max 30 degrees)
+            this.bird.rotation = Math.min(Math.max(this.bird.velocity * 3, -30), 30);
 
-        // Create new pipes at fixed intervals
-        if (this.nextPipeX <= this.canvas.width - this.config.pipeSpacing) {
-            this.createPipe();
-            this.nextPipeX = this.canvas.width;
+            // Update pipes
+            const moveDistance = this.config.gameSpeed * (deltaTime / 16.67);
+            this.pipes.forEach(pipe => {
+                pipe.x -= moveDistance;
+            });
+        } else {
+            // Bird stays stationary until first flap
+            this.bird.velocity = 0;
+            this.bird.rotation = 0;
         }
 
-        // Update pipes
-        const moveDistance = this.config.gameSpeed * (deltaTime / 16.67);
-        this.pipes.forEach(pipe => {
-            pipe.x -= moveDistance;
-        });
-
-        // Update next pipe position
-        this.nextPipeX -= moveDistance;
-
-        // Remove off-screen pipes
-        this.pipes = this.pipes.filter(pipe => pipe.x > -this.config.pipeWidth);
-
-        // Update score
-        this.pipes.forEach(pipe => {
-            if (pipe.x + this.config.pipeWidth < this.bird.x && !pipe.scored) {
-                this.score++;
-                pipe.scored = true;
+        // Only create/update pipes after game has started
+        if (this.gameStarted) {
+            // Create new pipes at fixed intervals
+            // Check if we need to create a new pipe
+            const lastPipeX = this.pipes.length > 0 
+                ? Math.max(...this.pipes.map(p => p.x)) 
+                : -this.config.pipeSpacing;
+            
+            // Create a new pipe when the last pipe (or start) is pipeSpacing away from the right edge
+            if (lastPipeX <= this.canvas.width - this.config.pipeSpacing) {
+                this.createPipe();
             }
-        });
 
-        // Check collisions
-        if (this.checkCollision()) {
-            this.gameOver();
+            // Remove off-screen pipes
+            this.pipes = this.pipes.filter(pipe => pipe.x > -this.config.pipeWidth);
+
+            // Update score
+            this.pipes.forEach(pipe => {
+                if (pipe.x + this.config.pipeWidth < this.bird.x && !pipe.scored) {
+                    this.score++;
+                    pipe.scored = true;
+                }
+            });
+
+            // Check collisions
+            if (this.checkCollision()) {
+                this.gameOver();
+            }
         }
     }
 
@@ -282,7 +362,8 @@ class FlappyBird {
 
         // Draw pipes with caps
         this.ctx.fillStyle = '#228B22';
-        this.pipes.forEach(pipe => {
+        if (this.pipes && Array.isArray(this.pipes)) {
+            this.pipes.forEach(pipe => {
             // Top pipe
             this.ctx.fillRect(pipe.x, 0, this.config.pipeWidth, pipe.topHeight);
             // Top pipe cap
@@ -293,7 +374,8 @@ class FlappyBird {
             this.ctx.fillRect(pipe.x, bottomY, this.config.pipeWidth, pipe.bottomHeight);
             // Bottom pipe cap
             this.ctx.fillRect(pipe.x - 5, bottomY, this.config.pipeWidth + 10, 20);
-        });
+            });
+        }
 
         // Draw ground
         this.ctx.fillStyle = '#8B4513';
@@ -307,13 +389,14 @@ class FlappyBird {
         this.ctx.lineTo(this.canvas.width, this.canvas.height - this.config.groundHeight);
         this.ctx.stroke();
 
-        // Draw bird with rotation
-        this.ctx.save();
-        this.ctx.translate(
-            this.bird.x + this.bird.width / 2,
-            this.bird.y + this.bird.height / 2
-        );
-        this.ctx.rotate((this.bird.rotation * Math.PI) / 180);
+        // Draw bird with rotation (only if bird exists)
+        if (this.bird && this.bird.x !== undefined && this.bird.y !== undefined) {
+            this.ctx.save();
+            this.ctx.translate(
+                this.bird.x + this.bird.width / 2,
+                this.bird.y + this.bird.height / 2
+            );
+            this.ctx.rotate((this.bird.rotation * Math.PI) / 180);
         
         // Bird body (yellow)
         this.ctx.fillStyle = '#FFD700';
@@ -342,7 +425,8 @@ class FlappyBird {
         this.ctx.closePath();
         this.ctx.fill();
         
-        this.ctx.restore();
+            this.ctx.restore();
+        }
 
         // Draw score with better styling
         this.ctx.fillStyle = '#FFF';
@@ -408,8 +492,45 @@ class FlappyBird {
     }
 }
 
+// Make FlappyBird class globally accessible
+window.FlappyBird = FlappyBird;
+
 // Initialize game when the window loads
+let game;
+let gameInitialized = false;
+
+function initializeGame() {
+    if (gameInitialized) {
+        console.log('Game already initialized, skipping...');
+        return;
+    }
+    
+    console.log('Initializing game...');
+    try {
+        game = new FlappyBird();
+        // Make game accessible globally for debugging
+        window.flappyBirdGame = game;
+        gameInitialized = true;
+        console.log('Game initialized successfully!', game);
+        // Don't auto-start - let user click the button
+    } catch (error) {
+        console.error('Error initializing game:', error);
+        console.error(error.stack);
+    }
+}
+
+// Try DOMContentLoaded first (faster)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeGame);
+} else {
+    // DOM already loaded
+    initializeGame();
+}
+
+// Also listen for window load as backup
 window.addEventListener('load', () => {
-    const game = new FlappyBird();
-    // Don't auto-start - let user click the button
+    if (!gameInitialized) {
+        console.log('Window loaded, game not initialized yet, initializing now...');
+        initializeGame();
+    }
 });
