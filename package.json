@@ -1,0 +1,48 @@
+{
+  "name": "flappy-bird-clone",
+  "version": "1.0.0",
+  "description": "A Flappy Bird clone game packaged as a Windows executable",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win"
+  },
+  "keywords": [
+    "game",
+    "flappy-bird",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.flappybird.clone",
+    "productName": "Flappy Bird Clone",
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "sign": null
+    },
+    "files": [
+      "index.html",
+      "game.js",
+      "styles.css",
+      "main.js",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}
+
