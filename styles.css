@@ -1,3 +1,13 @@
+@font-face {
+    font-family: 'Bitmgothic';
+    src: url('fonts/Bitmgothic.woff') format('woff'),
+         url('fonts/Bitmgothic.ttf') format('truetype'),
+         url('fonts/Bitmgothic.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -12,7 +22,7 @@ body {
     align-items: center;
     min-height: 100vh;
     background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
-    font-family: 'Arial', 'Helvetica', sans-serif;
+    font-family: 'Bitmgothic', 'Arial', 'Helvetica', sans-serif;
     overflow: hidden;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
@@ -90,6 +100,7 @@ h2 {
 
 .instructions {
     font-size: 1em;
+    font-family: 'Helvetica', Arial, sans-serif;
     color: #555;
     margin: 10px 0;
     max-width: 300px;
@@ -105,6 +116,7 @@ button {
     padding: 12px 30px;
     font-size: 1.2em;
     font-weight: bold;
+    font-family: 'Bitmgothic', Arial, sans-serif;
     cursor: pointer;
     background: #4CAF50;
     color: white;
@@ -129,6 +141,129 @@ button:hover {
 button:active {
     transform: translateY(0);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.difficulty-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+    width: 100%;
+    max-width: 250px;
+    align-items: center;
+}
+
+.difficulty-btn {
+    width: 100%;
+    min-width: 200px;
+    padding: 12px 30px;
+    font-size: 1.5em;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    transition: all 0.3s;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    touch-action: manipulation;
+    pointer-events: auto;
+    position: relative;
+    z-index: 20;
+}
+
+.difficulty-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+}
+
+.difficulty-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Easy mode button - green */
+#easyButton {
+    background: #4CAF50;
+    color: white;
+}
+
+#easyButton:hover {
+    background: #45a049;
+}
+
+/* Regular mode button - blue */
+#regularButton {
+    background: #2196F3;
+    color: white;
+}
+
+#regularButton:hover {
+    background: #0b7dda;
+}
+
+/* Insane mode button - red */
+#insaneButton {
+    background: #f44336;
+    color: white;
+}
+
+#insaneButton:hover {
+    background: #da190b;
+}
+
+/* Responsive design for difficulty buttons on mobile */
+@media (max-width: 450px) {
+    .difficulty-buttons {
+        max-width: 90%;
+    }
+    
+    .difficulty-btn {
+        min-width: 180px;
+        font-size: 1.3em;
+    }
+}
+
+.back-button {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 8px 16px;
+    font-size: 1em;
+    font-weight: bold;
+    font-family: 'Bitmgothic', Arial, sans-serif;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    border-radius: 6px;
+    transition: all 0.3s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    touch-action: manipulation;
+    pointer-events: auto;
+    z-index: 15;
+    margin: 0;
+    min-width: auto;
+}
+
+.back-button:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+}
+
+.back-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive design for back button on mobile */
+@media (max-width: 450px) {
+    .back-button {
+        top: 5px;
+        left: 5px;
+        padding: 6px 12px;
+        font-size: 0.9em;
+    }
 }
 
 #gameOverScreen {

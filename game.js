@@ -13,6 +13,25 @@ class FlappyBird {
         // Pattern cache for performance
         this.patterns = {};
         
+        // Difficulty modes configuration
+        this.difficultyModes = {
+            easy: {
+                gravity: 0.2,
+                gameSpeed: 2
+            },
+            regular: {
+                gravity: 0.3,
+                gameSpeed: 2
+            },
+            insane: {
+                gravity: 0.3,
+                gameSpeed: 4
+            }
+        };
+        
+        // Current difficulty (default to regular)
+        this.difficulty = 'regular';
+        
         // Game configuration (must be defined before setCanvasSize)
         this.config = {
             gravity: 0.3,
@@ -28,10 +47,26 @@ class FlappyBird {
         // Initialize pipes array early (needed for draw method)
         this.pipes = [];
         
+        // Initialize coins array
+        this.coins = [];
+        
+        // Coin images cache
+        this.coinImages = {};
+        this.coinSprites = {
+            'MonedaP': { value: 2, frames: 5, frameWidth: 0, frameHeight: 0, loaded: false },
+            'MonedaR': { value: 5, frames: 5, frameWidth: 0, frameHeight: 0, loaded: false },
+            'MonedaD': { value: 10, frames: 5, frameWidth: 0, frameHeight: 0, loaded: false }
+        };
+        
+        // Load coin images
+        this.loadCoinImages();
+        
         // Game state (initialize early)
         this.gameRunning = false;
         this.gameStarted = false; // Track if player has made first flap
         this.score = 0;
+        this.coinsCollected = 0; // Total coin value collected
+        this.pipeCount = 0; // Track number of pipes created for difficulty-based coin spawning
         this.highScore = this.loadHighScore();
         this.animationFrameId = null;
         this.lastTime = 0;
@@ -110,23 +145,17 @@ class FlappyBird {
                 e.preventDefault();
                 if (this.gameRunning) {
                     this.flap();
-                } else if (document.getElementById('startScreen').classList.contains('hidden') === false) {
-                    this.startGame();
-                } else if (document.getElementById('gameOverScreen').classList.contains('hidden') === false) {
-                    this.startGame();
                 }
+                // Don't auto-start from start screen - user must select difficulty
             }
         });
 
-        // Mouse/touch controls
+        // Mouse/touch controls - only flap during game
         this.canvas.addEventListener('click', () => {
             if (this.gameRunning) {
                 this.flap();
-            } else if (document.getElementById('startScreen').classList.contains('hidden') === false) {
-                this.startGame();
-            } else if (document.getElementById('gameOverScreen').classList.contains('hidden') === false) {
-                this.startGame();
             }
+            // Don't auto-start from start screen - user must select difficulty
         });
 
         // Touch controls for mobile
@@ -134,46 +163,96 @@ class FlappyBird {
             e.preventDefault();
             if (this.gameRunning) {
                 this.flap();
-            } else if (document.getElementById('startScreen').classList.contains('hidden') === false) {
-                this.startGame();
-            } else if (document.getElementById('gameOverScreen').classList.contains('hidden') === false) {
-                this.startGame();
             }
+            // Don't auto-start from start screen - user must select difficulty
         });
 
-        // Button listeners - use arrow function to preserve 'this' context
-        const startButton = document.getElementById('startButton');
-        const restartButton = document.getElementById('restartButton');
+        // Difficulty button listeners
+        const easyButton = document.getElementById('easyButton');
+        const regularButton = document.getElementById('regularButton');
+        const insaneButton = document.getElementById('insaneButton');
         
-        if (startButton) {
-            console.log('Start button found, attaching listener');
-            startButton.addEventListener('click', (e) => {
+        if (easyButton) {
+            easyButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Start button clicked!');
-                this.startGame();
-            });
-            // Also add mousedown as backup
-            startButton.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                console.log('Start button mousedown!');
-                this.startGame();
+                console.log('Easy button clicked!');
+                this.startGame('easy');
             });
         } else {
-            console.error('Start button not found!');
+            console.error('Easy button not found!');
         }
         
+        if (regularButton) {
+            regularButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Regular button clicked!');
+                this.startGame('regular');
+            });
+        } else {
+            console.error('Regular button not found!');
+        }
+        
+        if (insaneButton) {
+            insaneButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Insane button clicked!');
+                this.startGame('insane');
+            });
+        } else {
+            console.error('Insane button not found!');
+        }
+        
+        // Restart button - uses last selected difficulty
+        const restartButton = document.getElementById('restartButton');
         if (restartButton) {
             console.log('Restart button found, attaching listener');
             restartButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Restart button clicked!');
-                this.startGame();
+                console.log('Restart button clicked! Using difficulty:', this.difficulty);
+                // Use the last selected difficulty
+                this.startGame(this.difficulty);
             });
         } else {
             console.error('Restart button not found!');
         }
+        
+        // Back button - returns to start menu
+        const backButton = document.getElementById('backButton');
+        if (backButton) {
+            console.log('Back button found, attaching listener');
+            backButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Back button clicked!');
+                this.returnToStartMenu();
+            });
+        } else {
+            console.error('Back button not found!');
+        }
+    }
+
+    loadCoinImages() {
+        // Load all coin sprite images
+        Object.keys(this.coinSprites).forEach(coinType => {
+            const img = new Image();
+            img.onload = () => {
+                this.coinSprites[coinType].loaded = true;
+                this.coinImages[coinType] = img;
+                // Calculate frame dimensions (sprite sheets are horizontal strips)
+                const sprite = this.coinSprites[coinType];
+                sprite.frameWidth = img.width / sprite.frames;
+                sprite.frameHeight = img.height;
+                console.log(`Loaded ${coinType} coin sprite sheet: ${img.width}x${img.height}, ${sprite.frames} frames, frame size: ${sprite.frameWidth}x${sprite.frameHeight}`);
+            };
+            img.onerror = () => {
+                console.error(`Failed to load ${coinType} coin image`);
+            };
+            img.src = `assets/${coinType}.png`;
+        });
     }
 
     loadHighScore() {
@@ -186,21 +265,36 @@ class FlappyBird {
 
     saveHighScore() {
         try {
-            if (this.score > this.highScore) {
-                this.highScore = this.score;
-                localStorage.setItem('flappyBirdHighScore', this.highScore.toString());
-            }
+            // High score is now saved based on grand total (calculated in gameOver)
+            localStorage.setItem('flappyBirdHighScore', this.highScore.toString());
         } catch (e) {
             // Ignore localStorage errors
         }
     }
 
-    startGame() {
-        console.log('startGame() called');
+    startGame(difficulty = 'regular') {
+        console.log('startGame() called with difficulty:', difficulty);
         try {
+            // Validate and set difficulty
+            if (this.difficultyModes[difficulty]) {
+                this.difficulty = difficulty;
+                // Apply difficulty settings to config
+                const mode = this.difficultyModes[difficulty];
+                this.config.gravity = mode.gravity;
+                this.config.gameSpeed = mode.gameSpeed;
+            } else {
+                console.warn('Invalid difficulty, using regular');
+                this.difficulty = 'regular';
+                const mode = this.difficultyModes.regular;
+                this.config.gravity = mode.gravity;
+                this.config.gameSpeed = mode.gameSpeed;
+            }
+            
             this.gameRunning = true;
             this.gameStarted = false; // Reset - game starts on first flap
             this.score = 0;
+            this.coinsCollected = 0; // Reset coin count
+            this.pipeCount = 0; // Reset pipe counter
             this.bird = {
                 x: this.canvas.width / 2 - this.config.birdSize / 2,
                 y: this.canvas.height / 2,
@@ -212,6 +306,7 @@ class FlappyBird {
             };
             this.wingAnimationFrame = 0;
             this.pipes = [];
+            this.coins = []; // Reset coins array
             this.lastTime = performance.now();
             
             // Don't create first pipe until game actually starts (first flap)
@@ -219,6 +314,7 @@ class FlappyBird {
             // Hide screens
             const startScreen = document.getElementById('startScreen');
             const gameOverScreen = document.getElementById('gameOverScreen');
+            const backButton = document.getElementById('backButton');
             
             console.log('Hiding screens...');
             if (startScreen) {
@@ -232,6 +328,12 @@ class FlappyBird {
             if (gameOverScreen) {
                 gameOverScreen.classList.add('hidden');
                 gameOverScreen.style.display = 'none';
+            }
+            
+            // Show back button during gameplay
+            if (backButton) {
+                backButton.classList.remove('hidden');
+                backButton.style.display = '';
             }
             
             // Cancel any existing animation frame
@@ -325,11 +427,77 @@ class FlappyBird {
         const maxHeight = this.canvas.height - this.config.pipeGap - this.config.groundHeight - minHeight;
         const topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
         
-        this.pipes.push({
+        const pipe = {
             x: this.canvas.width,
             topHeight: topHeight,
             bottomHeight: this.canvas.height - topHeight - this.config.pipeGap - this.config.groundHeight,
             scored: false
+        };
+        
+        this.pipes.push(pipe);
+        this.pipeCount++; // Increment pipe counter
+        
+        // Spawn coins based on difficulty
+        if (this.difficulty === 'easy') {
+            // Easy: 1 coin every other pipe (centered, not randomized)
+            if (this.pipeCount % 2 === 0) {
+                this.createCoin(pipe, 0, false); // No randomization for easy mode
+            }
+        } else if (this.difficulty === 'regular') {
+            // Regular: 1 coin between every pipe (randomized position)
+            this.createCoin(pipe, 0, true); // Randomize position
+        } else if (this.difficulty === 'insane') {
+            // Insane: 2 coins between every pipe (both randomized)
+            this.createCoin(pipe, 0, true); // First coin, randomized
+            this.createCoin(pipe, 0, true);  // Second coin, randomized
+        }
+    }
+
+    createCoin(pipe, yOffset = 0, randomizePosition = false) {
+        // Randomly select coin type
+        const coinTypes = ['MonedaP', 'MonedaR', 'MonedaD'];
+        const weights = [0.5, 0.3, 0.2]; // Higher chance for lower value coins
+        let rand = Math.random();
+        let coinType = coinTypes[0];
+        
+        if (rand < weights[0]) {
+            coinType = coinTypes[0]; // MonedaP (2 coins)
+        } else if (rand < weights[0] + weights[1]) {
+            coinType = coinTypes[1]; // MonedaR (5 coins)
+        } else {
+            coinType = coinTypes[2]; // MonedaD (10 coins)
+        }
+        
+        // Position coin in the gap between pipes
+        const gapTop = pipe.topHeight;
+        const gapBottom = gapTop + this.config.pipeGap;
+        let coinY;
+        
+        if (randomizePosition) {
+            // Randomize position within the gap (leave some margin for coin size)
+            const coinSize = 25;
+            const margin = coinSize / 2;
+            const availableHeight = gapBottom - gapTop - coinSize;
+            coinY = gapTop + margin + Math.random() * availableHeight + yOffset;
+        } else {
+            // Center of gap with optional offset (for easy mode or fixed positioning)
+            coinY = gapTop + (gapBottom - gapTop) / 2 + yOffset;
+        }
+        
+        // Coin size
+        const coinSize = 25;
+        
+        this.coins.push({
+            x: pipe.x + this.config.pipeWidth + 20, // Slightly after the pipe
+            y: coinY,
+            width: coinSize,
+            height: coinSize,
+            type: coinType,
+            value: this.coinSprites[coinType].value,
+            collected: false,
+            animationFrame: 0,
+            spriteFrame: 0, // Current frame in sprite sheet
+            rotation: 0
         });
     }
 
@@ -377,6 +545,29 @@ class FlappyBird {
             // Remove off-screen pipes
             this.pipes = this.pipes.filter(pipe => pipe.x > -this.config.pipeWidth);
 
+            // Update coins
+            const moveDistance = this.config.gameSpeed * (deltaTime / 16.67);
+            this.coins.forEach(coin => {
+                if (!coin.collected) {
+                    coin.x -= moveDistance;
+                    // Animate coin (sprite sheet animation and floating)
+                    coin.animationFrame += deltaTime / 16.67;
+                    // Update sprite frame (animate through sprite sheet frames)
+                    const sprite = this.coinSprites[coin.type];
+                    if (sprite && sprite.frames > 1) {
+                        coin.spriteFrame = Math.floor((coin.animationFrame * 0.15) % sprite.frames);
+                    }
+                    // Store original Y for floating animation
+                    if (coin.originalY === undefined) {
+                        coin.originalY = coin.y;
+                    }
+                    coin.y = coin.originalY + Math.sin(coin.animationFrame * 0.1) * 3; // Float up and down
+                }
+            });
+
+            // Remove off-screen or collected coins
+            this.coins = this.coins.filter(coin => coin.x > -coin.width && !coin.collected);
+
             // Update score
             this.pipes.forEach(pipe => {
                 if (pipe.x + this.config.pipeWidth < this.bird.x && !pipe.scored) {
@@ -384,6 +575,9 @@ class FlappyBird {
                     pipe.scored = true;
                 }
             });
+
+            // Check coin collection
+            this.checkCoinCollection();
 
             // Check collisions
             if (this.checkCollision()) {
@@ -425,6 +619,31 @@ class FlappyBird {
         }
 
         return false;
+    }
+
+    checkCoinCollection() {
+        for (const coin of this.coins) {
+            if (coin.collected) continue;
+            
+            // Check if bird collides with coin using bounding box collision
+            const birdLeft = this.bird.x;
+            const birdRight = this.bird.x + this.bird.width;
+            const birdTop = this.bird.y;
+            const birdBottom = this.bird.y + this.bird.height;
+            
+            const coinLeft = coin.x;
+            const coinRight = coin.x + coin.width;
+            const coinTop = coin.y;
+            const coinBottom = coin.y + coin.height;
+            
+            // Check for overlap
+            if (birdRight > coinLeft && birdLeft < coinRight &&
+                birdBottom > coinTop && birdTop < coinBottom) {
+                coin.collected = true;
+                this.coinsCollected += coin.value;
+                console.log(`Collected ${coin.type} worth ${coin.value} coins! Total: ${this.coinsCollected}`);
+            }
+        }
     }
 
     draw() {
@@ -480,6 +699,48 @@ class FlappyBird {
         this.ctx.moveTo(0, groundY);
         this.ctx.lineTo(this.canvas.width, groundY);
         this.ctx.stroke();
+
+        // Draw coins
+        if (this.coins && Array.isArray(this.coins)) {
+            this.coins.forEach(coin => {
+                if (coin.collected) return;
+                
+                const coinImg = this.coinImages[coin.type];
+                const sprite = this.coinSprites[coin.type];
+                if (coinImg && sprite && sprite.loaded) {
+                    this.ctx.save();
+                    const coinX = Math.round(coin.x);
+                    const coinY = Math.round(coin.y);
+                    
+                    // Draw specific frame from sprite sheet
+                    const frameX = sprite.frameWidth * coin.spriteFrame;
+                    this.ctx.drawImage(
+                        coinImg,
+                        frameX, 0, // Source position in sprite sheet
+                        sprite.frameWidth, sprite.frameHeight, // Source size
+                        coinX, coinY, // Destination position
+                        coin.width, coin.height // Destination size
+                    );
+                    
+                    this.ctx.restore();
+                } else {
+                    // Fallback: draw colored circle if image not loaded
+                    this.ctx.save();
+                    this.ctx.fillStyle = coin.type === 'MonedaP' ? '#FFD700' : 
+                                        coin.type === 'MonedaR' ? '#FF6B6B' : '#4ECDC4';
+                    this.ctx.beginPath();
+                    this.ctx.arc(
+                        Math.round(coin.x + coin.width / 2),
+                        Math.round(coin.y + coin.height / 2),
+                        coin.width / 2,
+                        0,
+                        Math.PI * 2
+                    );
+                    this.ctx.fill();
+                    this.ctx.restore();
+                }
+            });
+        }
 
         // Draw bird with rotation and animated wing (pixel art style)
         if (this.bird && this.bird.x !== undefined && this.bird.y !== undefined) {
@@ -559,26 +820,38 @@ class FlappyBird {
             this.ctx.restore();
         }
 
-        // Draw score with pixel art styling
+        // Draw pipe score (centered)
         this.ctx.fillStyle = '#FFF';
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 2;
-        this.ctx.font = 'bold 28px monospace'; // Monospace for pixel art feel
+        this.ctx.font = 'bold 28px Bitmgothic, Arial, sans-serif';
         const scoreText = this.score.toString();
         const scoreX = Math.round(this.canvas.width / 2 - this.ctx.measureText(scoreText).width / 2);
         this.ctx.strokeText(scoreText, scoreX, 40);
         this.ctx.fillText(scoreText, scoreX, 40);
 
-        // Draw high score (pixel art style)
+        // Draw coin count (always visible, top-left)
+        this.ctx.fillStyle = '#FFD700';
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.font = 'bold 18px Bitmgothic, Arial, sans-serif';
+        const coinText = `💰 Coins: ${this.coinsCollected}`;
+        const coinX = Math.round(20);
+        const coinY = 70; // Position below the pipe score
+        this.ctx.strokeText(coinText, coinX, coinY);
+        this.ctx.fillText(coinText, coinX, coinY);
+
+        // Draw high score (pixel art style, centered below pipe score)
         if (this.highScore > 0) {
             this.ctx.fillStyle = '#FFC800';
             this.ctx.strokeStyle = '#000';
             this.ctx.lineWidth = 2;
-            this.ctx.font = 'bold 16px monospace';
+            this.ctx.font = 'bold 16px Bitmgothic, Arial, sans-serif';
             const highScoreText = `Best: ${this.highScore}`;
             const highScoreX = Math.round(this.canvas.width / 2 - this.ctx.measureText(highScoreText).width / 2);
-            this.ctx.strokeText(highScoreText, highScoreX, 70);
-            this.ctx.fillText(highScoreText, highScoreX, 70);
+            const highScoreY = 100; // Position below coin counter to avoid overlap
+            this.ctx.strokeText(highScoreText, highScoreX, highScoreY);
+            this.ctx.fillText(highScoreText, highScoreX, highScoreY);
         }
     }
 
@@ -606,12 +879,35 @@ class FlappyBird {
 
     gameOver() {
         this.gameRunning = false;
-        this.saveHighScore();
         
-        // Update high score display
+        // Calculate grand total (pipes + coins)
+        const grandTotal = this.score + this.coinsCollected;
+        
+        // Update high score (based on grand total)
+        if (grandTotal > this.highScore) {
+            this.highScore = grandTotal;
+            this.saveHighScore();
+        }
+        
+        // Update game over screen displays
         const highScoreElement = document.getElementById('highScore');
         if (highScoreElement) {
             highScoreElement.textContent = this.highScore;
+        }
+        
+        const finalScoreElement = document.getElementById('finalScore');
+        if (finalScoreElement) {
+            finalScoreElement.textContent = this.score;
+        }
+        
+        const finalCoinsElement = document.getElementById('finalCoins');
+        if (finalCoinsElement) {
+            finalCoinsElement.textContent = this.coinsCollected;
+        }
+        
+        const grandTotalElement = document.getElementById('grandTotal');
+        if (grandTotalElement) {
+            grandTotalElement.textContent = grandTotal;
         }
         
         const gameOverScreen = document.getElementById('gameOverScreen');
@@ -619,13 +915,58 @@ class FlappyBird {
             gameOverScreen.classList.remove('hidden');
             gameOverScreen.style.display = ''; // Clear inline display style
         }
-        document.getElementById('finalScore').textContent = this.score;
+        
+        // Hide back button on game over
+        const backButton = document.getElementById('backButton');
+        if (backButton) {
+            backButton.classList.add('hidden');
+            backButton.style.display = 'none';
+        }
         
         // Cancel animation frame
         if (this.animationFrameId) {
             cancelAnimationFrame(this.animationFrameId);
             this.animationFrameId = null;
         }
+    }
+
+    returnToStartMenu() {
+        // Hide game over screen
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        if (gameOverScreen) {
+            gameOverScreen.classList.add('hidden');
+            gameOverScreen.style.display = 'none';
+        }
+        
+        // Hide back button
+        const backButton = document.getElementById('backButton');
+        if (backButton) {
+            backButton.classList.add('hidden');
+            backButton.style.display = 'none';
+        }
+        
+        // Show start screen
+        const startScreen = document.getElementById('startScreen');
+        if (startScreen) {
+            startScreen.classList.remove('hidden');
+            startScreen.style.display = '';
+        }
+        
+        // Reset game state
+        this.gameRunning = false;
+        this.gameStarted = false;
+        this.pipes = [];
+        
+        // Reset bird position
+        if (this.bird) {
+            this.bird.x = this.canvas.width / 2 - this.config.birdSize / 2;
+            this.bird.y = this.canvas.height / 2;
+            this.bird.velocity = 0;
+            this.bird.rotation = 0;
+        }
+        
+        // Redraw
+        this.draw();
     }
 }
 
