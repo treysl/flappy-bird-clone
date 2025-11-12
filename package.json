@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build:win": "electron-builder --win"
+    "build:win": "electron-builder --win",
+    "build:win:zip": "electron-builder --win && powershell -ExecutionPolicy Bypass -File create-zip.ps1"
   },
   "keywords": [
     "game",
@@ -38,7 +39,9 @@
       "game.js",
       "styles.css",
       "main.js",
-      "package.json"
+      "package.json",
+      "assets/**/*",
+      "fonts/**/*"
     ],
     "directories": {
       "output": "dist"

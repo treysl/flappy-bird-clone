@@ -17,6 +17,9 @@ function createWindow() {
     resizable: true
   });
 
+  // Ensure audio is not muted
+  mainWindow.webContents.setAudioMuted(false);
+
   // Load the index.html file using absolute path
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 

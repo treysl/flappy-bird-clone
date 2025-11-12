@@ -4,6 +4,23 @@ class FlappyBird {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         
+        // Theme song playlist
+        this.themeSong = document.getElementById('themeSong');
+        this.songPlaylist = [
+            'assets/Flappy Pigeon Soundtrack/Flappy Pigeon Main Theme.mp3',
+            'assets/Flappy Pigeon Soundtrack/Flappy Pigeon 2.mp3'
+        ];
+        this.currentSongIndex = 0;
+        
+        if (this.themeSong) {
+            this.themeSong.volume = 0.5; // Set volume to 50%
+            this.themeSong.preload = 'auto'; // Preload the audio
+            // Set up playlist looping
+            this.setupPlaylist();
+            // Set up first interaction handler to start music
+            this.setupFirstInteractionMusicStart();
+        }
+        
         // Pixel art style - disable smoothing for crisp pixels
         this.ctx.imageSmoothingEnabled = false;
         
@@ -104,6 +121,20 @@ class FlappyBird {
 
         // Setup event listeners
         this.setupEventListeners();
+        
+        // Try to start music when window gets focus (user might have tabbed back)
+        window.addEventListener('focus', () => {
+            if (this.themeSong && this.themeSong.paused) {
+                this.playThemeSong().catch(() => {});
+            }
+        });
+        
+        // Also try when page becomes visible
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.themeSong && this.themeSong.paused) {
+                this.playThemeSong().catch(() => {});
+            }
+        });
         
         // Initial draw
         this.draw();
@@ -311,8 +342,168 @@ class FlappyBird {
         }
     }
 
+    setupPlaylist() {
+        if (!this.themeSong) return;
+        
+        // When a song ends, play the next one in the playlist
+        this.themeSong.addEventListener('ended', () => {
+            this.currentSongIndex = (this.currentSongIndex + 1) % this.songPlaylist.length;
+            this.loadAndPlayCurrentSong();
+        });
+        
+        // Load the first song
+        this.loadCurrentSong();
+    }
+    
+    setupFirstInteractionMusicStart() {
+        if (!this.themeSong) return;
+        
+        // Track if music has been started
+        let musicStarted = false;
+        
+        // Function to start music on first interaction
+        const startMusicOnInteraction = () => {
+            if (musicStarted) return;
+            musicStarted = true;
+            
+            // Start the music
+            if (this.themeSong && this.themeSong.paused) {
+                this.playThemeSong().catch(err => {
+                    console.log('Failed to start music on first interaction:', err);
+                    // If it fails, try loading and playing
+                    this.loadAndPlayCurrentSong();
+                });
+            }
+            
+            // Remove all listeners after first interaction
+            document.removeEventListener('click', startMusicOnInteraction, true);
+            document.removeEventListener('keydown', startMusicOnInteraction, true);
+            document.removeEventListener('touchstart', startMusicOnInteraction, true);
+            this.canvas.removeEventListener('click', startMusicOnInteraction, true);
+            this.canvas.removeEventListener('touchstart', startMusicOnInteraction, true);
+        };
+        
+        // Listen for any user interaction to start music
+        // Use capture phase to catch events early
+        document.addEventListener('click', startMusicOnInteraction, true);
+        document.addEventListener('keydown', startMusicOnInteraction, true);
+        document.addEventListener('touchstart', startMusicOnInteraction, true);
+        this.canvas.addEventListener('click', startMusicOnInteraction, true);
+        this.canvas.addEventListener('touchstart', startMusicOnInteraction, true);
+    }
+    
+    startThemeSong() {
+        if (!this.themeSong) return;
+        
+        // Wait a bit for the song to load, then try to play
+        const tryPlay = () => {
+            if (this.themeSong.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+                this.playThemeSong().catch((error) => {
+                    console.log('Autoplay attempt failed, will retry:', error);
+                    // Retry after a short delay
+                    setTimeout(() => {
+                        this.playThemeSong().catch(err => console.log('Retry failed:', err));
+                    }, 500);
+                });
+            } else {
+                // Wait for song to load
+                this.themeSong.addEventListener('loadeddata', () => {
+                    this.playThemeSong().catch((error) => {
+                        console.log('Autoplay after load failed, will retry:', error);
+                        setTimeout(() => {
+                            this.playThemeSong().catch(err => console.log('Retry failed:', err));
+                        }, 500);
+                    });
+                }, { once: true });
+                
+                // Also try after a short delay as fallback
+                setTimeout(() => {
+                    if (this.themeSong.paused) {
+                        this.playThemeSong().catch((error) => {
+                            console.log('Delayed autoplay failed:', error);
+                        });
+                    }
+                }, 500);
+            }
+        };
+        
+        // Try immediately if already loaded, otherwise wait
+        if (this.themeSong.readyState >= 2) {
+            tryPlay();
+        } else {
+            this.themeSong.addEventListener('canplay', tryPlay, { once: true });
+            // Fallback timeout
+            setTimeout(tryPlay, 1000);
+        }
+    }
+    
+    loadCurrentSong() {
+        if (!this.themeSong) return;
+        
+        const currentSong = this.songPlaylist[this.currentSongIndex];
+        this.themeSong.src = currentSong;
+        this.themeSong.load();
+        
+        // Add error handler to check if file loads
+        this.themeSong.addEventListener('error', (e) => {
+            console.error('Error loading theme song:', currentSong, e);
+        }, { once: true });
+        
+        // Log when song is loaded
+        this.themeSong.addEventListener('loadeddata', () => {
+            console.log('Theme song loaded:', currentSong);
+        }, { once: true });
+    }
+    
+    loadAndPlayCurrentSong() {
+        if (!this.themeSong) return;
+        
+        // Load the current song
+        this.loadCurrentSong();
+        
+        // Try to play - will work after user interaction
+        this.playThemeSong();
+    }
+    
+    playThemeSong() {
+        if (!this.themeSong) return Promise.reject('No theme song element');
+        
+        // Make sure song is loaded
+        if (!this.themeSong.src || this.themeSong.src === '') {
+            this.loadCurrentSong();
+            // Wait a bit for it to load
+            return new Promise((resolve, reject) => {
+                this.themeSong.addEventListener('canplay', () => {
+                    this.themeSong.play().then(() => {
+                        console.log('Theme song started playing');
+                        resolve();
+                    }).catch(reject);
+                }, { once: true });
+                setTimeout(() => reject('Timeout loading song'), 2000);
+            });
+        }
+        
+        const playPromise = this.themeSong.play();
+        if (playPromise !== undefined) {
+            return playPromise.then(() => {
+                console.log('Theme song started playing');
+            }).catch(error => {
+                console.log('Theme song play error:', error);
+                throw error;
+            });
+        }
+        return Promise.resolve();
+    }
+
+    pauseThemeSong() {
+        if (this.themeSong) {
+            this.themeSong.pause();
+        }
+    }
+
     startGame(difficulty = 'regular') {
         console.log('startGame() called with difficulty:', difficulty);
+        
         try {
             // Validate and set difficulty
             if (this.difficultyModes[difficulty]) {
