@@ -576,12 +576,12 @@ class FlappyBird {
                     const scaledWidth = layer.width * scaleY;
                     
                     // Update scroll position (scroll right to left, same direction as pipes)
-                    // Subtract to move the source position left, creating right-to-left visual movement
-                    this.backgroundScrollPositions[index] = (this.backgroundScrollPositions[index] || 0) - moveDistance * parallaxSpeed;
+                    // Add to create a counter that increases, which we'll use to read from source
+                    this.backgroundScrollPositions[index] = (this.backgroundScrollPositions[index] || 0) + moveDistance * parallaxSpeed;
                     
                     // Reset position when layer scrolls completely off screen (seamless loop)
-                    if (this.backgroundScrollPositions[index] <= -scaledWidth) {
-                        this.backgroundScrollPositions[index] += scaledWidth;
+                    if (this.backgroundScrollPositions[index] >= scaledWidth) {
+                        this.backgroundScrollPositions[index] -= scaledWidth;
                     }
                 }
             });
@@ -720,40 +720,46 @@ class FlappyBird {
                 // Scale factor to fit layer to canvas height
                 const scaleY = this.canvas.height / layer.height;
                 const scaledWidth = layer.width * scaleY;
+                const canvasWidthInSource = this.canvas.width / scaleY;
                 
-                // Normalize scroll position to be within scaled width for seamless looping
-                // For right-to-left scrolling, we use negative scroll positions
-                scrollPos = scrollPos % scaledWidth;
-                if (scrollPos < 0) scrollPos += scaledWidth;
+                // Convert scroll position to source image coordinates
+                let scrollPosInSource = (scrollPos % scaledWidth) / scaleY;
                 
-                // Calculate source X position in the layer image
-                // For right-to-left, we read from left to right in the source
-                const sourceX = scrollPos / scaleY;
+                // For right-to-left scrolling: read from further right in source as scrollPos increases
+                // This creates leftward visual movement (content moves from right to left on screen)
+                // When scrollPos = 0: read from rightmost part (layer.width - canvasWidthInSource)
+                // As scrollPos increases: read from further right (sourceX increases)
+                let sourceX = (layer.width - canvasWidthInSource + scrollPosInSource) % layer.width;
                 
-                // Draw first part (from current scroll position to end of layer)
-                const remainingInLayer = (scaledWidth - scrollPos);
-                const firstPartWidth = Math.min(remainingInLayer, this.canvas.width);
+                // Calculate how much we can read from sourceX
+                const remainingInSource = layer.width - sourceX;
+                const firstPartSourceWidth = Math.min(remainingInSource, canvasWidthInSource);
+                const firstPartCanvasWidth = firstPartSourceWidth * scaleY;
                 
-                if (firstPartWidth > 0) {
+                // Draw first part (from sourceX to end of layer)
+                if (firstPartCanvasWidth > 0 && firstPartSourceWidth > 0) {
                     this.ctx.drawImage(
                         layer,
                         sourceX, 0,
-                        firstPartWidth / scaleY, layer.height,
+                        firstPartSourceWidth, layer.height,
                         0, 0,
-                        firstPartWidth, this.canvas.height
+                        firstPartCanvasWidth, this.canvas.height
                     );
                 }
                 
                 // Draw second part (from beginning of layer) if needed for seamless loop
-                if (firstPartWidth < this.canvas.width) {
-                    const secondPartWidth = this.canvas.width - firstPartWidth;
-                    this.ctx.drawImage(
-                        layer,
-                        0, 0,
-                        secondPartWidth / scaleY, layer.height,
-                        firstPartWidth, 0,
-                        secondPartWidth, this.canvas.height
-                    );
+                if (firstPartCanvasWidth < this.canvas.width) {
+                    const secondPartCanvasWidth = this.canvas.width - firstPartCanvasWidth;
+                    const secondPartSourceWidth = secondPartCanvasWidth / scaleY;
+                    if (secondPartSourceWidth > 0) {
+                        this.ctx.drawImage(
+                            layer,
+                            0, 0,
+                            secondPartSourceWidth, layer.height,
+                            firstPartCanvasWidth, 0,
+                            secondPartCanvasWidth, this.canvas.height
+                        );
+                    }
                 }
             }
         });
