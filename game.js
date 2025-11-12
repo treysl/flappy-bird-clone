@@ -614,7 +614,11 @@ class FlappyBird {
             highScoreElement.textContent = this.highScore;
         }
         
-        document.getElementById('gameOverScreen').classList.remove('hidden');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        if (gameOverScreen) {
+            gameOverScreen.classList.remove('hidden');
+            gameOverScreen.style.display = ''; // Clear inline display style
+        }
         document.getElementById('finalScore').textContent = this.score;
         
         // Cancel animation frame
