@@ -17,10 +17,11 @@ function createWindow() {
     resizable: true
   });
 
-  // Load the index.html file
-  mainWindow.loadFile('index.html');
+  // Load the index.html file using absolute path
+  mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
-  // Open DevTools in development (comment out for production)
+  // DevTools disabled for production
+  // Uncomment the line below if you need to debug:
   // mainWindow.webContents.openDevTools();
 }
 
