@@ -61,6 +61,11 @@ class FlappyBird {
         // Load coin images
         this.loadCoinImages();
         
+        // Background layers for parallax scrolling
+        this.backgroundLayers = [];
+        this.backgroundScrollPositions = [];
+        this.loadBackgroundImages();
+        
         // Game state (initialize early)
         this.gameRunning = false;
         this.gameStarted = false; // Track if player has made first flap
@@ -252,6 +257,40 @@ class FlappyBird {
                 console.error(`Failed to load ${coinType} coin image`);
             };
             img.src = `assets/${coinType}.png`;
+        });
+    }
+
+    loadBackgroundImages() {
+        // Load background layers in order (back to front)
+        // Layer numbers indicate depth: higher numbers = further back (slower scroll)
+        const layerFiles = [
+            'Layer_0011_0.png',  // Furthest back
+            'Layer_0010_1.png',
+            'Layer_0009_2.png',
+            'Layer_0008_3.png',
+            'Layer_0007_Lights.png',
+            'Layer_0006_4.png',
+            'Layer_0005_5.png',
+            'Layer_0004_Lights.png',
+            'Layer_0003_6.png',
+            'Layer_0002_7.png',
+            'Layer_0001_8.png',
+            'Layer_0000_9.png'   // Closest
+        ];
+        
+        let loadedCount = 0;
+        layerFiles.forEach((filename, index) => {
+            const img = new Image();
+            img.onload = () => {
+                this.backgroundLayers[index] = img;
+                this.backgroundScrollPositions[index] = 0;
+                loadedCount++;
+                console.log(`Loaded background layer ${index}: ${filename}`);
+            };
+            img.onerror = () => {
+                console.error(`Failed to load background layer: ${filename}`);
+            };
+            img.src = `assets/background/${filename}`;
         });
     }
 
@@ -523,6 +562,29 @@ class FlappyBird {
             this.pipes.forEach(pipe => {
                 pipe.x -= moveDistance;
             });
+            
+            // Update background scroll positions (parallax effect)
+            // Further layers scroll slower for depth effect
+            this.backgroundLayers.forEach((layer, index) => {
+                if (layer && layer.complete && layer.width) {
+                    // Calculate parallax speed: further layers (higher index) scroll slower
+                    // Layer 0 (furthest) scrolls at 0.1x speed, layer 11 (closest) scrolls at 0.9x speed
+                    const parallaxSpeed = 0.1 + (index / Math.max(this.backgroundLayers.length - 1, 1)) * 0.8;
+                    
+                    // Scale factor to match drawing scale
+                    const scaleY = this.canvas.height / layer.height;
+                    const scaledWidth = layer.width * scaleY;
+                    
+                    // Update scroll position (scroll right to left, same direction as pipes)
+                    // Subtract to move the source position left, creating right-to-left visual movement
+                    this.backgroundScrollPositions[index] = (this.backgroundScrollPositions[index] || 0) - moveDistance * parallaxSpeed;
+                    
+                    // Reset position when layer scrolls completely off screen (seamless loop)
+                    if (this.backgroundScrollPositions[index] <= -scaledWidth) {
+                        this.backgroundScrollPositions[index] += scaledWidth;
+                    }
+                }
+            });
         } else {
             // Bird stays stationary until first flap
             this.bird.velocity = 0;
@@ -650,12 +712,60 @@ class FlappyBird {
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw background with subtle pattern (pixel art style - darker sky)
-        const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-        gradient.addColorStop(0, '#5B9BD5'); // Pixel art blue
-        gradient.addColorStop(1, '#B0D4E6'); // Lighter blue
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        // Draw scrolling background layers (parallax effect)
+        this.backgroundLayers.forEach((layer, index) => {
+            if (layer && layer.complete && layer.width) {
+                let scrollPos = this.backgroundScrollPositions[index] || 0;
+                
+                // Scale factor to fit layer to canvas height
+                const scaleY = this.canvas.height / layer.height;
+                const scaledWidth = layer.width * scaleY;
+                
+                // Normalize scroll position to be within scaled width for seamless looping
+                // For right-to-left scrolling, we use negative scroll positions
+                scrollPos = scrollPos % scaledWidth;
+                if (scrollPos < 0) scrollPos += scaledWidth;
+                
+                // Calculate source X position in the layer image
+                // For right-to-left, we read from left to right in the source
+                const sourceX = scrollPos / scaleY;
+                
+                // Draw first part (from current scroll position to end of layer)
+                const remainingInLayer = (scaledWidth - scrollPos);
+                const firstPartWidth = Math.min(remainingInLayer, this.canvas.width);
+                
+                if (firstPartWidth > 0) {
+                    this.ctx.drawImage(
+                        layer,
+                        sourceX, 0,
+                        firstPartWidth / scaleY, layer.height,
+                        0, 0,
+                        firstPartWidth, this.canvas.height
+                    );
+                }
+                
+                // Draw second part (from beginning of layer) if needed for seamless loop
+                if (firstPartWidth < this.canvas.width) {
+                    const secondPartWidth = this.canvas.width - firstPartWidth;
+                    this.ctx.drawImage(
+                        layer,
+                        0, 0,
+                        secondPartWidth / scaleY, layer.height,
+                        firstPartWidth, 0,
+                        secondPartWidth, this.canvas.height
+                    );
+                }
+            }
+        });
+        
+        // Fallback: solid color if background not loaded
+        if (this.backgroundLayers.length === 0 || !this.backgroundLayers[0] || !this.backgroundLayers[0].complete) {
+            const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+            gradient.addColorStop(0, '#5B9BD5');
+            gradient.addColorStop(1, '#B0D4E6');
+            this.ctx.fillStyle = gradient;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
 
         // Draw pipes with patterns (pixel art style)
         if (this.pipes && Array.isArray(this.pipes)) {
