@@ -93,6 +93,11 @@ class FlappyBird {
         this.animationFrameId = null;
         this.lastTime = 0;
         
+        // Crash animation state
+        this.isCrashing = false;
+        this.crashAnimationTime = 0;
+        this.crashAnimationDuration = 1000; // 1 second crash animation
+        
         // Set canvas size (base size, will scale for mobile)
         this.baseWidth = 400;
         this.baseHeight = 600;
@@ -525,6 +530,8 @@ class FlappyBird {
             this.score = 0;
             this.coinsCollected = 0; // Reset coin count
             this.pipeCount = 0; // Reset pipe counter
+            this.isCrashing = false; // Reset crash state
+            this.crashAnimationTime = 0;
             this.bird = {
                 x: this.canvas.width / 2 - this.config.birdSize / 2,
                 y: this.canvas.height / 2,
@@ -734,13 +741,36 @@ class FlappyBird {
     update(deltaTime) {
         if (!this.gameRunning) return;
         
-        // Update wing animation frame (always animate, even when stationary)
-        this.wingAnimationFrame += deltaTime / 16.67; // Normalize to 60fps
-        // Calculate wing angle using sine wave for smooth flapping
-        this.bird.wingAngle = Math.sin(this.wingAnimationFrame * 0.3) * 25; // 25 degree max angle
+        // Handle crash animation
+        if (this.isCrashing) {
+            this.crashAnimationTime += deltaTime;
+            
+            // Continue physics during crash (bird falls and spins)
+            this.bird.velocity += this.config.gravity * 1.5; // Faster fall during crash
+            this.bird.y += this.bird.velocity * (deltaTime / 16.67);
+            
+            // Dramatic spinning rotation during crash (multiple full rotations)
+            const spinSpeed = 15; // degrees per frame
+            this.bird.rotation += spinSpeed * (deltaTime / 16.67);
+            
+            // Stop wing animation during crash
+            this.bird.wingAngle = 0;
+            
+            // End crash animation and show game over screen
+            if (this.crashAnimationTime >= this.crashAnimationDuration) {
+                this.isCrashing = false;
+                this.gameOver();
+                return;
+            }
+        } else {
+            // Update wing animation frame (always animate, even when stationary)
+            this.wingAnimationFrame += deltaTime / 16.67; // Normalize to 60fps
+            // Calculate wing angle using sine wave for smooth flapping
+            this.bird.wingAngle = Math.sin(this.wingAnimationFrame * 0.3) * 25; // 25 degree max angle
+        }
 
         // Only apply physics and move pipes after game has started (first flap)
-        if (this.gameStarted) {
+        if (this.gameStarted && !this.isCrashing) {
             // Update bird physics
             this.bird.velocity += this.config.gravity;
             this.bird.y += this.bird.velocity * (deltaTime / 16.67); // Normalize to 60fps
@@ -782,8 +812,8 @@ class FlappyBird {
             this.bird.rotation = 0;
         }
 
-        // Only create/update pipes after game has started
-        if (this.gameStarted) {
+        // Only create/update pipes after game has started (and not during crash)
+        if (this.gameStarted && !this.isCrashing) {
             // Create new pipes at fixed intervals
             // Check if we need to create a new pipe
             const lastPipeX = this.pipes.length > 0 
@@ -832,9 +862,9 @@ class FlappyBird {
             // Check coin collection
             this.checkCoinCollection();
 
-            // Check collisions
-            if (this.checkCollision()) {
-                this.gameOver();
+            // Check collisions (only if not already crashing)
+            if (!this.isCrashing && this.checkCollision()) {
+                this.startCrashAnimation();
             }
         }
     }
@@ -872,6 +902,18 @@ class FlappyBird {
         }
 
         return false;
+    }
+
+    startCrashAnimation() {
+        // Start crash animation
+        this.isCrashing = true;
+        this.crashAnimationTime = 0;
+        
+        // Stop game progression (pipes, coins, etc.)
+        // But keep physics running for the bird to fall
+        
+        // Increase bird velocity to make it fall faster
+        this.bird.velocity = Math.max(this.bird.velocity, 2);
     }
 
     checkCoinCollection() {
@@ -1055,10 +1097,17 @@ class FlappyBird {
             const birdCenterX = Math.round(this.bird.x + this.bird.width / 2);
             const birdCenterY = Math.round(this.bird.y + this.bird.height / 2);
             this.ctx.translate(birdCenterX, birdCenterY);
-            this.ctx.rotate((this.bird.rotation * Math.PI) / 180);
+            
+            // During crash, use the spinning rotation; otherwise use velocity-based rotation
+            const rotationAngle = this.isCrashing ? this.bird.rotation : this.bird.rotation;
+            this.ctx.rotate((rotationAngle * Math.PI) / 180);
         
-            // Bird body (pixel art yellow - more saturated)
-            this.ctx.fillStyle = '#FFC800';
+            // During crash, make bird slightly darker/reddish to show impact
+            const birdColor = this.isCrashing ? '#FF6B6B' : '#FFC800';
+            const birdOutlineColor = this.isCrashing ? '#E64A4A' : '#E6B800';
+            
+            // Bird body (pixel art yellow - more saturated, or red during crash)
+            this.ctx.fillStyle = birdColor;
             this.ctx.fillRect(
                 Math.round(-this.bird.width / 2), 
                 Math.round(-this.bird.height / 2), 
@@ -1067,7 +1116,7 @@ class FlappyBird {
             );
             
             // Bird body outline for pixel art style
-            this.ctx.strokeStyle = '#E6B800';
+            this.ctx.strokeStyle = birdOutlineColor;
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(
                 Math.round(-this.bird.width / 2), 
@@ -1076,10 +1125,11 @@ class FlappyBird {
                 this.bird.height
             );
         
-            // Animated bird wing (rotates based on wingAngle)
-            this.ctx.save();
-            this.ctx.rotate((this.bird.wingAngle * Math.PI) / 180);
-            this.ctx.fillStyle = '#FF8C00';
+            // Animated bird wing (rotates based on wingAngle, but not during crash)
+            if (!this.isCrashing) {
+                this.ctx.save();
+                this.ctx.rotate((this.bird.wingAngle * Math.PI) / 180);
+                this.ctx.fillStyle = '#FF8C00';
             // Draw wing as rectangle for pixel art style
             this.ctx.fillRect(
                 Math.round(-this.bird.width / 2 - 8), 
@@ -1087,15 +1137,32 @@ class FlappyBird {
                 10, 
                 12
             );
-            // Wing outline
-            this.ctx.strokeStyle = '#E67A00';
-            this.ctx.strokeRect(
-                Math.round(-this.bird.width / 2 - 8), 
-                Math.round(-6), 
-                10, 
-                12
-            );
-            this.ctx.restore();
+                // Wing outline
+                this.ctx.strokeStyle = '#E67A00';
+                this.ctx.strokeRect(
+                    Math.round(-this.bird.width / 2 - 8), 
+                    Math.round(-6), 
+                    10, 
+                    12
+                );
+                this.ctx.restore();
+            } else {
+                // During crash, draw wing in a drooping position
+                this.ctx.fillStyle = '#E64A4A';
+                this.ctx.fillRect(
+                    Math.round(-this.bird.width / 2 - 8), 
+                    Math.round(2), 
+                    10, 
+                    8
+                );
+                this.ctx.strokeStyle = '#C43A3A';
+                this.ctx.strokeRect(
+                    Math.round(-this.bird.width / 2 - 8), 
+                    Math.round(2), 
+                    10, 
+                    8
+                );
+            }
         
             // Bird eye (pixel art style - square-ish)
             this.ctx.fillStyle = '#000';
@@ -1262,6 +1329,8 @@ class FlappyBird {
         // Reset game state
         this.gameRunning = false;
         this.gameStarted = false;
+        this.isCrashing = false; // Reset crash state
+        this.crashAnimationTime = 0;
         this.pipes = [];
         
         // Reset bird position
@@ -1270,6 +1339,7 @@ class FlappyBird {
             this.bird.y = this.canvas.height / 2;
             this.bird.velocity = 0;
             this.bird.rotation = 0;
+            this.bird.wingAngle = 0;
         }
         
         // Redraw
