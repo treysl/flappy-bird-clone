@@ -33,16 +33,16 @@ class FlappyBird {
         // Difficulty modes configuration
         this.difficultyModes = {
             easy: {
-                gravity: 0.2,
+                gravity: 0.35,
                 gameSpeed: 2
             },
             regular: {
-                gravity: 0.3,
-                gameSpeed: 2
+                gravity: 0.35,
+                gameSpeed: 3
             },
             insane: {
-                gravity: 0.3,
-                gameSpeed: 4
+                gravity: 0.35,
+                gameSpeed: 5
             }
         };
         
